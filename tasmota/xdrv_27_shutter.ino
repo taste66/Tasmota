@@ -458,6 +458,8 @@ void ShutterWaitForMotorStop(uint32_t i)
       delay(MOTOR_STOP_TIME);
     }
   } else {
+    AddLog_P2(LOG_LEVEL_INFO, PSTR("SHT: Stop shutter"));
+    CmndShutterStop(); // Stop shutter do not change the direction
     delay(MOTOR_STOP_TIME);
   }
 }
@@ -826,14 +828,26 @@ void CmndShutterPosition(void)
         if (Shutter.direction[index] != new_shutterdirection) {
           if ((SHT_OFF_ON__OPEN_CLOSE == Shutter.mode) || (SHT_OFF_ON__OPEN_CLOSE_STEPPER == Shutter.mode)) {
             //AddLog_P2(LOG_LEVEL_DEBUG, PSTR("SHT: Delay5 5s, xdrv %d"), XdrvMailbox.payload);
-            ShutterWaitForMotorStop(index);
-            ExecuteCommandPower(Settings.shutter_startrelay[index], 0, SRC_SHUTTER);
-            ShutterStartInit(index, new_shutterdirection, Shutter.target_position[index]);
-            if (Shutter.skip_relay_change == 0) {
-              // Code for shutters with circuit safe configuration, switch the direction Relay
-              ExecuteCommandPower(Settings.shutter_startrelay[index] +1, new_shutterdirection == 1 ? 0 : 1, SRC_SHUTTER);
-              // power on
-              ExecuteCommandPower(Settings.shutter_startrelay[index], 1, SRC_SHUTTER);
+            // avoid direction change set new direction to zero
+            if (Shutter.direction[index] != 0) { // Shutter was moving so avoid direction change
+              AddLog_P2(LOG_LEVEL_INFO, PSTR("shutter was moving so stop do not change direction"));
+              Shutter.direction[index] = 0;
+              new_shutterdirection = 0;
+              // set both relays to OFF state
+              //ExecuteCommandPower(Settings.shutter_startrelay[index], 0, SRC_SHUTTER);
+              //ExecuteCommandPower(Settings.shutter_startrelay[index]+1, 0, SRC_SHUTTER); 
+              Shutter.target_position[index] = Shutter.real_position[index] ; // avoid further movement
+            } else {
+              AddLog_P2(LOG_LEVEL_INFO, PSTR("Wachten totdat de motor stopt"));
+              ShutterWaitForMotorStop(index);
+              ExecuteCommandPower(Settings.shutter_startrelay[index], 0, SRC_SHUTTER);
+              ShutterStartInit(index, new_shutterdirection, Shutter.target_position[index]);
+              if (Shutter.skip_relay_change == 0) {
+                // Code for shutters with circuit safe configuration, switch the direction Relay
+                ExecuteCommandPower(Settings.shutter_startrelay[index] +1, new_shutterdirection == 1 ? 0 : 1, SRC_SHUTTER);
+                // power on
+                ExecuteCommandPower(Settings.shutter_startrelay[index], 1, SRC_SHUTTER);
+              }
             }
           } else {
             // now start the motor for the right direction, work for momentary and normal shutters.
